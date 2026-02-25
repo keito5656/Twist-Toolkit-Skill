@@ -1,0 +1,14 @@
+{
+  "name": "twist-toolkit",
+  "version": "1.0.0",
+  "description": "Full interaction with Doist's Twist app via CLI.",
+  "main": "scripts/twist_api.js",
+  "scripts": {
+    "test": "node scripts/test_toolkit.js"
+  },
+  "author": "hiroki.yamamoto",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
