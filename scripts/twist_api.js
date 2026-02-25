@@ -45,6 +45,45 @@ function ensureGitIgnore() {
   }
 }
 
+function logAudit(message) {
+  const timestamp = new Date().toISOString();
+  process.stderr.write(`\x1b[90m[AUDIT ${timestamp}] ${message}\x1b[0m\n`);
+}
+
+/**
+ * Mitigate Indirect Prompt Injection by neutralizing malicious patterns
+ * from external Twist content before it reaches the AI agent.
+ */
+function sanitizeForAI(obj) {
+  if (!obj) return obj;
+  if (typeof obj === 'string') {
+    const maliciousPatterns = [
+      /ignore all previous instructions/gi,
+      /ignore the above/gi,
+      /system override/gi,
+      /instead of doing that/gi,
+      /execute the following/gi,
+      /you must now/gi
+    ];
+    let sanitized = obj;
+    maliciousPatterns.forEach(p => {
+      sanitized = sanitized.replace(p, '[REDACTED_POTENTIAL_INJECTION]');
+    });
+    return sanitized;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForAI(item));
+  }
+  if (typeof obj === 'object') {
+    const newObj = {};
+    for (const key in obj) {
+      newObj[key] = sanitizeForAI(obj[key]);
+    }
+    return newObj;
+  }
+  return obj;
+}
+
 function request(method, apiPath, body = null, isAuthRequest = false) {
   const config = loadConfig();
   const token = config.token;
@@ -52,6 +91,8 @@ function request(method, apiPath, body = null, isAuthRequest = false) {
   if (!token && !isAuthRequest) {
     throw new Error('Authentication required. Please run "login" and "auth <code>" first.');
   }
+
+  logAudit(`API Request: ${method} ${apiPath}`);
 
   return new Promise((resolve, reject) => {
     const options = {
@@ -93,6 +134,8 @@ async function uploadRequest(filePath, attachmentId) {
   const token = config.token;
   if (!token) throw new Error('Authentication required.');
   if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+
+  logAudit(`Attachment Upload: ${filePath} (ID: ${attachmentId})`);
 
   const fileName = path.basename(filePath);
   const boundary = '----TwistToolkitBoundary' + Math.random().toString(16).slice(2);
@@ -165,6 +208,8 @@ See \x1b[36mSKILL.md\x1b[0m for the full list of 35+ commands.`);
     return;
   }
 
+  logAudit(`Executing command: ${command}`);
+
   try {
     switch (command) {
       case 'setup':
@@ -221,59 +266,59 @@ If you haven't already, please install the integration to your workspace first:
         break;
 
       case 'workspaces':
-        console.log(JSON.stringify(await request('GET', '/workspaces/get'), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', '/workspaces/get')), null, 2));
         break;
       case 'users':
-        console.log(JSON.stringify(await request('GET', `/workspace_users/get?id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/workspace_users/get?id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'add_workspace_user':
-        console.log(JSON.stringify(await request('POST', '/workspace_users/add', `id=${process.argv[3] || config.workspace_id}&email=${encodeURIComponent(process.argv[4])}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/workspace_users/add', `id=${process.argv[3] || config.workspace_id}&email=${encodeURIComponent(process.argv[4])}`)), null, 2));
         break;
       case 'get_user_by_email':
-        console.log(JSON.stringify(await request('GET', `/users/get_by_email?email=${encodeURIComponent(process.argv[3])}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/users/get_by_email?email=${encodeURIComponent(process.argv[3])}`)), null, 2));
         break;
       case 'get_user_info':
-        console.log(JSON.stringify(await request('GET', `/workspace_users/get_info?id=${process.argv[3] || config.workspace_id}&user_id=${process.argv[4]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/workspace_users/get_info?id=${process.argv[3] || config.workspace_id}&user_id=${process.argv[4]}`)), null, 2));
         break;
       case 'update_user':
-        console.log(JSON.stringify(await request('POST', '/users/update', `name=${encodeURIComponent(process.argv[3])}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/users/update', `name=${encodeURIComponent(process.argv[3])}`)), null, 2));
         break;
       case 'channels':
-        console.log(JSON.stringify(await request('GET', `/channels/get?workspace_id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/channels/get?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'add_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/add', `workspace_id=${process.argv[3] || config.workspace_id}&name=${encodeURIComponent(process.argv[4])}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/add', `workspace_id=${process.argv[3] || config.workspace_id}&name=${encodeURIComponent(process.argv[4])}`)), null, 2));
         break;
       case 'update_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/update', `id=${process.argv[3]}&name=${encodeURIComponent(process.argv[4])}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/update', `id=${process.argv[3]}&name=${encodeURIComponent(process.argv[4])}`)), null, 2));
         break;
       case 'archive_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/archive', `id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/archive', `id=${process.argv[3]}`)), null, 2));
         break;
       case 'unarchive_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/unarchive', `id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/unarchive', `id=${process.argv[3]}`)), null, 2));
         break;
       case 'favorite_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/favorite', `id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/favorite', `id=${process.argv[3]}`)), null, 2));
         break;
       case 'remove_channel':
         await request('POST', '/channels/remove', `id=${process.argv[3]}`);
         console.log('Channel removed.');
         break;
       case 'add_user_to_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/add_user', `id=${process.argv[3]}&user_id=${process.argv[4]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/add_user', `id=${process.argv[3]}&user_id=${process.argv[4]}`)), null, 2));
         break;
       case 'remove_user_from_channel':
-        console.log(JSON.stringify(await request('POST', '/channels/remove_user', `id=${process.argv[3]}&user_id=${process.argv[4]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/remove_user', `id=${process.argv[3]}&user_id=${process.argv[4]}`)), null, 2));
         break;
       case 'threads':
-        console.log(JSON.stringify(await request('GET', `/threads/get?channel_id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/threads/get?channel_id=${process.argv[3]}`)), null, 2));
         break;
       case 'unread_threads':
-        console.log(JSON.stringify(await request('GET', `/threads/get_unread?workspace_id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/threads/get_unread?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'add_thread':
-        console.log(JSON.stringify(await request('POST', '/threads/add', `channel_id=${process.argv[3]}&title=${encodeURIComponent(process.argv[4])}&content=${encodeURIComponent(process.argv.slice(5).join(' '))}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/threads/add', `channel_id=${process.argv[3]}&title=${encodeURIComponent(process.argv[4])}&content=${encodeURIComponent(process.argv.slice(5).join(' '))}`)), null, 2));
         break;
       case 'star_thread':
         await request('POST', '/threads/star', `id=${process.argv[3]}`);
@@ -284,26 +329,26 @@ If you haven't already, please install the integration to your workspace first:
         console.log('Unstarred.');
         break;
       case 'close_thread':
-        console.log(JSON.stringify(await request('POST', '/threads/update', `id=${process.argv[3]}&closed=1`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/threads/update', `id=${process.argv[3]}&closed=1`)), null, 2));
         break;
       case 'reopen_thread':
-        console.log(JSON.stringify(await request('POST', '/threads/update', `id=${process.argv[3]}&closed=0`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/threads/update', `id=${process.argv[3]}&closed=0`)), null, 2));
         break;
       case 'comments':
-        console.log(JSON.stringify(await request('GET', `/comments/get?thread_id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/comments/get?thread_id=${process.argv[3]}`)), null, 2));
         break;
       case 'reply':
-        console.log(JSON.stringify(await request('POST', '/comments/add', `thread_id=${process.argv[3]}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/comments/add', `thread_id=${process.argv[3]}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`)), null, 2));
         break;
       case 'add_reaction':
         await request('POST', '/reactions/add', `comment_id=${process.argv[3]}&reaction=${encodeURIComponent(process.argv[4])}`);
         console.log('Reaction added.');
         break;
       case 'inbox':
-        console.log(JSON.stringify(await request('GET', `/inbox/get?workspace_id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/inbox/get?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'get_inbox_count':
-        console.log(JSON.stringify(await request('GET', `/inbox/get_count?workspace_id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/inbox/get_count?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'complete_thread':
       case 'archive_thread':
@@ -323,12 +368,12 @@ If you haven't already, please install the integration to your workspace first:
         console.log('All marked as read.');
         break;
       case 'conversations':
-        console.log(JSON.stringify(await request('GET', `/conversations/get?workspace_id=${process.argv[3] || config.workspace_id}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/conversations/get?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
       case 'get_or_create_conversation':
         const convWs = process.argv[3] || config.workspace_id;
         const userIds = process.argv[4];
-        console.log(JSON.stringify(await request('POST', '/conversations/get_or_create', `workspace_id=${convWs}&user_ids=${encodeURIComponent(userIds)}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/conversations/get_or_create', `workspace_id=${convWs}&user_ids=${encodeURIComponent(userIds)}`)), null, 2));
         break;
       case 'archive_conversation':
         await request('POST', '/conversations/archive', `id=${process.argv[3]}`);
@@ -339,10 +384,10 @@ If you haven't already, please install the integration to your workspace first:
         console.log('Muted.');
         break;
       case 'add_message':
-        console.log(JSON.stringify(await request('POST', '/conversation_messages/add', `conversation_id=${process.argv[3]}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/conversation_messages/add', `conversation_id=${process.argv[3]}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`)), null, 2));
         break;
       case 'messages':
-        console.log(JSON.stringify(await request('GET', `/conversation_messages/get?conversation_id=${process.argv[3]}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/conversation_messages/get?conversation_id=${process.argv[3]}`)), null, 2));
         break;
       case 'search':
         let searchWs = config.workspace_id;
@@ -353,17 +398,17 @@ If you haven't already, please install the integration to your workspace first:
         } else {
           query = process.argv.slice(3).join(' ');
         }
-        console.log(JSON.stringify(await request('GET', `/search?workspace_id=${searchWs}&query=${encodeURIComponent(query)}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/search?workspace_id=${searchWs}&query=${encodeURIComponent(query)}`)), null, 2));
         break;
       case 'search_in_thread':
-        console.log(JSON.stringify(await request('GET', `/search/thread?thread_id=${process.argv[3]}&query=${encodeURIComponent(process.argv.slice(4).join(' '))}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/search/thread?thread_id=${process.argv[3]}&query=${encodeURIComponent(process.argv.slice(4).join(' '))}`)), null, 2));
         break;
       case 'upload_attachment':
-        console.log(JSON.stringify(await uploadRequest(process.argv[4], process.argv[3]), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await uploadRequest(process.argv[4], process.argv[3])), null, 2));
         break;
       case 'notification_settings':
         const targetWsNotif = process.argv[3] || config.workspace_id;
-        console.log(JSON.stringify(await request('GET', `/notifications_settings/get?workspace_id=${targetWsNotif}`), null, 2));
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/notifications_settings/get?workspace_id=${targetWsNotif}`)), null, 2));
         break;
 
       default:
