@@ -1,5 +1,56 @@
 # 🤖 Twist Toolkit Skill
 
+**Twist Toolkit** is an **AI-native skill (extension)** designed for AI agents to interact with [Twist](https://twist.com/) workspaces autonomously, supporting user communication.
+
+AI can use this tool to summarize threads, extract key mentions, organize inboxes, reply on behalf of the user, and share files programmatically.
+
+## 🔥 Capabilities
+
+Empowering your AI agent with this skill enables:
+
+- **Autonomous Inbox Management:** AI understands and executes requests like "Check unread threads and archive low-priority ones."
+- **Intelligent Search:** Cross-search months of threads to help the AI research project history or past decisions.
+- **Reply Assistant:** AI analyzes context and posts appropriate messages directly to channels or DMs.
+- **Resource Management:** AI integrates channel creation, member invitations, and file uploads into your workflow.
+
+## 🚀 Onboarding (Connecting to AI Agent)
+
+### 1. Placement
+Place this repository in a directory accessible to your AI agent (e.g., `skills/`).
+
+### 2. Initial Setup (Conversation-based Auth)
+To allow the AI to access Twist, a human performs a one-time authentication through **prompts** to the AI.
+
+**Pre-requisite:**
+First, install the Twist integration to your workspace via [this link](https://twist.com/integrations/install/7598_fede8f25e6ac33e8b89557aa).
+
+1. **User:** Ask the AI to "Login to Twist."
+2. **AI:** Provides a URL to open in your browser.
+3. **User:** Authorize in the browser and copy the `code` displayed after redirect.
+4. **User:** Send the authentication code to the AI.
+5. **AI:** Completes the authentication internally.
+
+### 3. Environment Recognition
+After authentication, ask the AI to "Setup my workspace." The AI will autonomously identify your workspaces and set the default one.
+
+## 🧠 AI-Ready Interface (SKILL.md)
+
+Full functionality is defined in [SKILL.md](./SKILL.md) in a format readable by AI.
+The AI understands command arguments (like optional workspace IDs) and parses JSON responses to decide its next action.
+
+## 🔐 Security
+- Auth tokens are saved locally in `.twist_toolkit_auth.json`.
+- This file is automatically protected by `.gitignore` and will never be leaked externally.
+
+## 🛠️ Technical Specs
+- **Engine:** Node.js (v14+)
+- **API:** Twist API v3 (Field-Tested / Doc-Gap resolved)
+- **Coverage:** 100% functional test verified (`npm test`)
+
+---
+
+# 🤖 Twist Toolkit Skill (日本語版)
+
 **Twist Toolkit** は、AIエージェントが [Twist](https://twist.com/) のワークスペースを自在に操作し、ユーザーのコミュニケーションを自律的にサポートするための **AI専用スキル（拡張機能）** です。
 
 AIはこのツールを介して、スレッドの要約、重要なメンションの抽出、インボックスの整理、返信の代行、ファイルの共有などをプログラムレベルで実行できるようになります。
@@ -20,6 +71,9 @@ AIエージェント（Gemini CLI等）がアクセス可能なディレクト�
 
 ### 2. 初期セットアップ（対話による認証）
 AIがTwistにアクセスできるよう、初回のみ人間がAIへの **「プロンプト」** を通じて認証を行います。
+
+**事前準備:** 
+まず最初に、[こちらのリンク](https://twist.com/integrations/install/7598_fede8f25e6ac33e8b89557aa) からTwist連携をワークスペースにインストールしてください。
 
 1. **ユーザー:** 「Twistにログインして」とAIに依頼。
 2. **AI:** ブラウザを開くURLを提示。
