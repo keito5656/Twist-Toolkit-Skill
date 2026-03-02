@@ -9,6 +9,8 @@ const SCRIPT_DIR = __dirname;
 const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..');
 const AUTH_FILE_NAME = '.twist_toolkit_auth.json';
 const AUTH_PATH = path.join(PROJECT_ROOT, AUTH_FILE_NAME);
+const CACHE_FILE_NAME = '.twist_cache.json';
+const CACHE_PATH = path.join(PROJECT_ROOT, CACHE_FILE_NAME);
 
 const DEFAULT_CLIENT_ID = '75986781489b9a94891f7a510622bd38efd3';
 const DEFAULT_CLIENT_SECRET = '75980aefb8cab11453be255a5df06b1805e2';
@@ -43,6 +45,53 @@ function ensureGitIgnore() {
   if (!content.includes(AUTH_FILE_NAME)) {
     fs.appendFileSync(gitIgnorePath, `\n# Twist Toolkit Auth\n${AUTH_FILE_NAME}\n`);
   }
+  if (!content.includes(CACHE_FILE_NAME)) {
+    fs.appendFileSync(gitIgnorePath, `${CACHE_FILE_NAME}\n`);
+  }
+}
+
+// --- Cache Module ---
+function readCache() {
+  if (fs.existsSync(CACHE_PATH)) {
+    try {
+      return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
+    } catch (e) {
+      // Corrupted cache file: return empty structure
+      return { channels: {}, conversations: {}, users: {}, metadata: {} };
+    }
+  }
+  return { channels: {}, conversations: {}, users: {}, metadata: {} };
+}
+
+function writeCache(data) {
+  data.metadata = data.metadata || {};
+  data.metadata.last_updated = new Date().toISOString();
+  fs.writeFileSync(CACHE_PATH, JSON.stringify(data, null, 2));
+}
+
+function updateCache(type, key, value) {
+  const cache = readCache();
+  if (!cache[type]) cache[type] = {};
+  cache[type][key] = value;
+  writeCache(cache);
+}
+
+/**
+ * Resolve a name-or-ID argument to a numeric ID using cache.
+ * If the argument is numeric, return it as-is.
+ * If it's a string, look it up in the cache under the given type.
+ */
+function resolveId(type, nameOrId) {
+  if (!isNaN(nameOrId)) return nameOrId;
+  const cache = readCache();
+  const wsId = loadConfig().workspace_id;
+  // If cache was built for a different workspace, warn
+  if (cache.metadata && cache.metadata.workspace_id && wsId && cache.metadata.workspace_id !== wsId) {
+    throw new Error(`Cache was built for workspace ${cache.metadata.workspace_id}, but current workspace is ${wsId}. Run "update_cache" to refresh.`);
+  }
+  const map = cache[type] || {};
+  if (map[nameOrId] !== undefined) return map[nameOrId];
+  throw new Error(`"${nameOrId}" not found in ${type} cache. Run "update_cache" to refresh, or specify the numeric ID directly.`);
 }
 
 function logAudit(message) {
@@ -268,9 +317,20 @@ If you haven't already, please install the integration to your workspace first:
       case 'workspaces':
         console.log(JSON.stringify(sanitizeForAI(await request('GET', '/workspaces/get')), null, 2));
         break;
-      case 'users':
-        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/workspace_users/get?id=${process.argv[3] || config.workspace_id}`)), null, 2));
+      case 'users': {
+        const usersData = sanitizeForAI(await request('GET', `/workspace_users/get?id=${process.argv[3] || config.workspace_id}`));
+        // Auto-cache: name -> id
+        if (Array.isArray(usersData)) {
+          const cache = readCache();
+          cache.users = {};
+          usersData.forEach(u => { if (u.name && u.id) cache.users[u.name] = u.id; });
+          cache.metadata = cache.metadata || {};
+          cache.metadata.workspace_id = process.argv[3] || config.workspace_id;
+          writeCache(cache);
+        }
+        console.log(JSON.stringify(usersData, null, 2));
         break;
+      }
       case 'add_workspace_user':
         console.log(JSON.stringify(sanitizeForAI(await request('POST', '/workspace_users/add', `id=${process.argv[3] || config.workspace_id}&email=${encodeURIComponent(process.argv[4])}`)), null, 2));
         break;
@@ -283,9 +343,20 @@ If you haven't already, please install the integration to your workspace first:
       case 'update_user':
         console.log(JSON.stringify(sanitizeForAI(await request('POST', '/users/update', `name=${encodeURIComponent(process.argv[3])}`)), null, 2));
         break;
-      case 'channels':
-        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/channels/get?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
+      case 'channels': {
+        const chData = sanitizeForAI(await request('GET', `/channels/get?workspace_id=${process.argv[3] || config.workspace_id}`));
+        // Auto-cache: name -> id
+        if (Array.isArray(chData)) {
+          const cache = readCache();
+          cache.channels = {};
+          chData.forEach(ch => { if (ch.name && ch.id) cache.channels[ch.name] = ch.id; });
+          cache.metadata = cache.metadata || {};
+          cache.metadata.workspace_id = process.argv[3] || config.workspace_id;
+          writeCache(cache);
+        }
+        console.log(JSON.stringify(chData, null, 2));
         break;
+      }
       case 'add_channel':
         console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/add', `workspace_id=${process.argv[3] || config.workspace_id}&name=${encodeURIComponent(process.argv[4])}`)), null, 2));
         break;
@@ -311,15 +382,19 @@ If you haven't already, please install the integration to your workspace first:
       case 'remove_user_from_channel':
         console.log(JSON.stringify(sanitizeForAI(await request('POST', '/channels/remove_user', `id=${process.argv[3]}&user_id=${process.argv[4]}`)), null, 2));
         break;
-      case 'threads':
-        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/threads/get?channel_id=${process.argv[3]}`)), null, 2));
+      case 'threads': {
+        const thChId = resolveId('channels', process.argv[3]);
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/threads/get?channel_id=${thChId}`)), null, 2));
         break;
+      }
       case 'unread_threads':
         console.log(JSON.stringify(sanitizeForAI(await request('GET', `/threads/get_unread?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
         break;
-      case 'add_thread':
-        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/threads/add', `channel_id=${process.argv[3]}&title=${encodeURIComponent(process.argv[4])}&content=${encodeURIComponent(process.argv.slice(5).join(' '))}`)), null, 2));
+      case 'add_thread': {
+        const atChId = resolveId('channels', process.argv[3]);
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/threads/add', `channel_id=${atChId}&title=${encodeURIComponent(process.argv[4])}&content=${encodeURIComponent(process.argv.slice(5).join(' '))}`)), null, 2));
         break;
+      }
       case 'star_thread':
         await request('POST', '/threads/star', `id=${process.argv[3]}`);
         console.log('Starred.');
@@ -367,9 +442,27 @@ If you haven't already, please install the integration to your workspace first:
         await request('POST', '/inbox/mark_all_read', `workspace_id=${process.argv[3] || config.workspace_id}`);
         console.log('All marked as read.');
         break;
-      case 'conversations':
-        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/conversations/get?workspace_id=${process.argv[3] || config.workspace_id}`)), null, 2));
+      case 'conversations': {
+        const convData = sanitizeForAI(await request('GET', `/conversations/get?workspace_id=${process.argv[3] || config.workspace_id}`));
+        // Auto-cache: title/participants -> id
+        if (Array.isArray(convData)) {
+          const cache = readCache();
+          cache.conversations = {};
+          convData.forEach(c => {
+            let key = c.title || null;
+            if (!key && Array.isArray(c.users) && c.users.length > 0) {
+              key = c.users.map(u => u.name || u.short_name || `user_${u.id || u}`).join(', ');
+            }
+            if (!key) key = `conversation_${c.id}`;
+            if (c.id) cache.conversations[key] = c.id;
+          });
+          cache.metadata = cache.metadata || {};
+          cache.metadata.workspace_id = process.argv[3] || config.workspace_id;
+          writeCache(cache);
+        }
+        console.log(JSON.stringify(convData, null, 2));
         break;
+      }
       case 'get_or_create_conversation':
         const convWs = process.argv[3] || config.workspace_id;
         const userIds = process.argv[4];
@@ -383,12 +476,16 @@ If you haven't already, please install the integration to your workspace first:
         await request('POST', '/conversations/mute', `id=${process.argv[3]}&minutes=${process.argv[4] || 60}`);
         console.log('Muted.');
         break;
-      case 'add_message':
-        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/conversation_messages/add', `conversation_id=${process.argv[3]}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`)), null, 2));
+      case 'add_message': {
+        const amConvId = resolveId('conversations', process.argv[3]);
+        console.log(JSON.stringify(sanitizeForAI(await request('POST', '/conversation_messages/add', `conversation_id=${amConvId}&content=${encodeURIComponent(process.argv.slice(4).join(' '))}`)), null, 2));
         break;
-      case 'messages':
-        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/conversation_messages/get?conversation_id=${process.argv[3]}`)), null, 2));
+      }
+      case 'messages': {
+        const msgConvId = resolveId('conversations', process.argv[3]);
+        console.log(JSON.stringify(sanitizeForAI(await request('GET', `/conversation_messages/get?conversation_id=${msgConvId}`)), null, 2));
         break;
+      }
       case 'search':
         let searchWs = config.workspace_id;
         let query = "";
@@ -409,6 +506,58 @@ If you haven't already, please install the integration to your workspace first:
       case 'notification_settings':
         const targetWsNotif = process.argv[3] || config.workspace_id;
         console.log(JSON.stringify(sanitizeForAI(await request('GET', `/notifications_settings/get?workspace_id=${targetWsNotif}`)), null, 2));
+        break;
+
+      // --- Cache Management Commands ---
+      case 'update_cache': {
+        const ucWsId = process.argv[3] || config.workspace_id;
+        if (!ucWsId) { console.error('Error: workspace_id is required. Run set_workspace first.'); break; }
+        const cache = { channels: {}, conversations: {}, users: {}, metadata: { workspace_id: ucWsId } };
+        // Fetch channels
+        try {
+          const chList = await request('GET', `/channels/get?workspace_id=${ucWsId}`);
+          if (Array.isArray(chList)) chList.forEach(ch => { if (ch.name && ch.id) cache.channels[ch.name] = ch.id; });
+        } catch (e) { console.error(`Warning: Failed to fetch channels: ${e.message}`); }
+        // Fetch conversations
+        try {
+          const convList = await request('GET', `/conversations/get?workspace_id=${ucWsId}`);
+          if (Array.isArray(convList)) convList.forEach(c => {
+            let key = c.title || null;
+            if (!key && Array.isArray(c.users) && c.users.length > 0) {
+              key = c.users.map(u => u.name || u.short_name || `user_${u.id || u}`).join(', ');
+            }
+            if (!key) key = `conversation_${c.id}`;
+            if (c.id) cache.conversations[key] = c.id;
+          });
+        } catch (e) { console.error(`Warning: Failed to fetch conversations: ${e.message}`); }
+        // Fetch users
+        try {
+          const userList = await request('GET', `/workspace_users/get?id=${ucWsId}`);
+          if (Array.isArray(userList)) userList.forEach(u => { if (u.name && u.id) cache.users[u.name] = u.id; });
+        } catch (e) { console.error(`Warning: Failed to fetch users: ${e.message}`); }
+        writeCache(cache);
+        console.log(`Cache updated: ${Object.keys(cache.channels).length} channels, ${Object.keys(cache.conversations).length} conversations, ${Object.keys(cache.users).length} users.`);
+        break;
+      }
+      case 'show_cache': {
+        const cacheData = readCache();
+        const cacheType = process.argv[3];
+        if (cacheType && cacheData[cacheType]) {
+          console.log(JSON.stringify(cacheData[cacheType], null, 2));
+        } else if (cacheType) {
+          console.log(`Unknown cache type: ${cacheType}. Available: channels, conversations, users, metadata`);
+        } else {
+          console.log(JSON.stringify(cacheData, null, 2));
+        }
+        break;
+      }
+      case 'clear_cache':
+        if (fs.existsSync(CACHE_PATH)) {
+          fs.unlinkSync(CACHE_PATH);
+          console.log('Cache cleared.');
+        } else {
+          console.log('No cache file found.');
+        }
         break;
 
       default:

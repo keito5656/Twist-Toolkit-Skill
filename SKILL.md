@@ -69,5 +69,15 @@ No additional installation is required. Node.js is needed to run the core script
 - **Notification Settings:** `node scripts/twist_api.js notification_settings [workspace_id]`
 - **Upload File:** `node scripts/twist_api.js upload_attachment <attachment_id> <file_path>`
 
+### 7. Cache Management
+- **Update Cache:** `node scripts/twist_api.js update_cache [workspace_id]`
+- **Show Cache:** `node scripts/twist_api.js show_cache [type]` (type: channels, conversations, users, metadata)
+- **Clear Cache:** `node scripts/twist_api.js clear_cache`
+
 ## Tip: Default Workspace
 For commands marked with `[workspace_id]`, the parameter is optional if you have set a default via `set_workspace`.
+
+## Tip: キャッシュの活用によるID指定の省略
+Twistのチャンネル名やグループDM名を使って直接投稿等のアクションを行うことができます。
+コマンドの引数にIDの代わりに名前（例: "動作テスト", "General"）を渡してください。
+もし名前で指定してエラーになった場合（キャッシュに存在しない場合）は、`node scripts/twist_api.js update_cache` コマンドを実行してキャッシュを最新化してから、再度実行してください。
