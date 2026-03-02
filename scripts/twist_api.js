@@ -163,7 +163,7 @@ function request(method, apiPath, body = null, isAuthRequest = false) {
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          try { resolve(JSON.parse(data)); } catch(e) { resolve(data); }
+          try { resolve(JSON.parse(data)); } catch (e) { resolve(data); }
         } else if (res.statusCode === 401) {
           reject(new Error('Unauthorized: Token might be expired. Please run "login" again.'));
         } else {
@@ -190,7 +190,7 @@ async function uploadRequest(filePath, attachmentId) {
   const boundary = '----TwistToolkitBoundary' + Math.random().toString(16).slice(2);
   const fileData = fs.readFileSync(filePath);
 
-  const header = 
+  const header =
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="attachment_id"\r\n\r\n` +
     `${attachmentId}\r\n` +
@@ -218,7 +218,7 @@ async function uploadRequest(filePath, attachmentId) {
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          try { resolve(JSON.parse(data)); } catch(e) { resolve(data); }
+          try { resolve(JSON.parse(data)); } catch (e) { resolve(data); }
         } else {
           reject(new Error(`Upload API Error: ${res.statusCode} ${data}`));
         }
@@ -287,7 +287,8 @@ If you haven't already, please install the integration to your workspace first:
           'attachments:read', 'attachments:write', 'notifications:read', 'search:read',
           'user:read', 'user:write'
         ].join(',');
-        const authUrl = `https://twist.com/oauth/authorize?client_id=${config.client_id}&scope=${scopes}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(config.redirect_uri)}`;
+        const authUrl = `https://twist.com/oauth/authorize?client_id=${config.client_id}&scope=${scopes}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(config.redirect_uri)}&prompt=login`;
+        console.log(`\x1b[33m[TIP]\x1b[0m If switching accounts, sign out of Twist in your browser first: \x1b[36mhttps://twist.com/logout\x1b[0m`);
         console.log('Opening browser...');
         const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
         exec(`${openCmd} "${authUrl}"`);
@@ -297,6 +298,7 @@ If you haven't already, please install the integration to your workspace first:
         if (fs.existsSync(AUTH_PATH)) {
           fs.unlinkSync(AUTH_PATH);
           console.log('\x1b[32mLogged out successfully. Authentication file removed.\x1b[0m');
+          console.log('\x1b[33m[TIP]\x1b[0m To switch accounts, also sign out in your browser: \x1b[36mhttps://twist.com/logout\x1b[0m');
         } else {
           console.log('No authentication file found. You are already logged out.');
         }
